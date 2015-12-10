@@ -6,19 +6,31 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	http.HandleFunc("/v1/events/1", EventsShow)
+	http.HandleFunc("/v1/events/", EventsShow)
 	log.Fatal(http.ListenAndServe(":4321", nil))
 }
 
 func EventsShow(w http.ResponseWriter, r *http.Request) {
-	event, err := GetEvent(1)
+	id, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/v1/events/"))
 	if err != nil {
+		sorry(w, err)
+		return
+	}
+
+	event, err := GetEvent(int64(id))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		sorry(w, err)
 		return
 	}
@@ -70,7 +82,7 @@ func GetEvent(id int64) (Event, error) {
 		address, name, lat, lon                  string
 	)
 
-	err = db.QueryRow("SELECT * FROM events WHERE id = $1", 1).
+	err = db.QueryRow("SELECT * FROM events WHERE id = $1", id).
 		Scan(&eventId, &createdAt, &updatedAt, &endedAt, &name, &startedAt, &ownerId, &address, &lat, &lon)
 
 	if err != nil {
