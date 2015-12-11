@@ -4,17 +4,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
 	http.HandleFunc("/v1/events/", EventsShow)
+	http.HandleFunc("/v1/events", EventsCreate)
 	log.Fatal(http.ListenAndServe(":4321", nil))
 }
 
@@ -44,6 +45,30 @@ func EventsShow(w http.ResponseWriter, r *http.Request) {
 	w.Write(chars)
 }
 
+func EventsCreate(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		sorry(w, fmt.Errorf("Unable to read request body: %s", err))
+		return
+	}
+
+	var event Event
+
+	err = json.Unmarshal(body, &event)
+	if err != nil {
+		sorry(w, fmt.Errorf("Error unmarshaling request: %#v %s", err, body))
+		return
+	}
+
+	err = event.Create()
+	if err != nil {
+		w.WriteHeader(422)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write([]byte(fmt.Sprintf("{\"id\": %d}", event.Id)))
+}
+
 func sorry(w http.ResponseWriter, err error) {
 	chars, err := json.Marshal(struct {
 		Err string `json:"error"`
@@ -54,51 +79,4 @@ func sorry(w http.ResponseWriter, err error) {
 
 	w.WriteHeader(http.StatusInternalServerError)
 	w.Write(chars)
-}
-
-type Event struct {
-	Address string    `json:"address"`
-	EndedAt time.Time `json:"ended_at"`
-	Id      int64     `json:"id"`
-	Lat     string    `json:"lat"`
-	Lon     string    `json:"lon"`
-	Name    string    `json:"name"`
-	Owner   struct {
-		Id int64 `json:"id"`
-	} `json:"owner"`
-	StartedAt time.Time `json:"started_at"`
-}
-
-func GetEvent(id int64) (Event, error) {
-	db, err := sql.Open("postgres", "postgres://localhost/humon_development?sslmode=disable")
-	if err != nil {
-		return Event{}, fmt.Errorf("Error connection: " + err.Error())
-	}
-	defer db.Close()
-
-	var (
-		eventId, ownerId                         int64
-		createdAt, updatedAt, endedAt, startedAt time.Time
-		address, name, lat, lon                  string
-	)
-
-	err = db.QueryRow("SELECT * FROM events WHERE id = $1", id).
-		Scan(&eventId, &createdAt, &updatedAt, &endedAt, &name, &startedAt, &ownerId, &address, &lat, &lon)
-
-	if err != nil {
-		return Event{}, err
-	}
-
-	return Event{
-		Address: address,
-		EndedAt: endedAt,
-		Id:      eventId,
-		Lat:     lat,
-		Lon:     lon,
-		Name:    name,
-		Owner: struct {
-			Id int64 `json:"id"`
-		}{ownerId},
-		StartedAt: startedAt,
-	}, nil
 }

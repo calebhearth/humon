@@ -16,40 +16,19 @@ describe "Events API" do
     end
 
     it "returns an event by :id" do
-      create(:event)
-      response = get "/v1/events/1"
+      event = create(:event)
+      response = get "/v1/events/#{event.id}"
       expect(response.code).to eq "200"
 
       expect(JSON.parse(response.body)).to eq(
-        "address" => "123 Main St",
-        "ended_at" => "2001-01-01T00:00:00Z",
-        "id" => 1,
-        "lat" => "30.267153",
-        "lon" => "-97.743061",
-        "name" => "Austin",
-        "owner" => { "id" => 1 },
-        "started_at" => "2001-01-01T00:00:00Z",
-      )
-    end
-
-    it 'returns an event by :id' do
-      event = create(:event)
-
-      response = get "/v1/events/#{event.id}"
-
-      expect(JSON.parse(response.body)).to eq(
-        {
-          'address' => event.address,
-          'ended_at' => event.ended_at,
-          'id' => event.id,
-          'lat' => event.lat,
-          'lon' => event.lon,
-          'name' => event.name,
-          'started_at' => event.started_at,
-          'owner' => {
-            'id' => event.owner.id
-          }
-        }
+        "address" => event.address,
+        "ended_at" => event.ended_at.utc.strftime('%Y-%m-%dT%H:%M:%S.%6NZ'),
+        "id" => event.id,
+        "lat" => event.lat,
+        "lon" => event.lon,
+        "name" => event.name,
+        "owner" => { "id" => event.user_id },
+        "started_at" => event.started_at.utc.strftime('%Y-%m-%dT%H:%M:%S.%6NZ'),
       )
     end
 
@@ -62,30 +41,33 @@ describe "Events API" do
   describe 'POST /v1/events' do
 
     it 'saves the address, lat, lon, name, owner, and started_at date' do
-      date = DateTime.now
+      date = DateTime.now.utc
+      datestring = date.strftime('%Y-%m-%dT%H:%M:%S.%6NZ')
       device_token = '123abcd456xyz'
       owner = create(:user, device_token: device_token)
 
       response = post '/v1/events', {
         address: '123 Example St.',
-        ended_at: date,
+        ended_at: datestring,
         lat: 1.0,
         lon: 1.0,
         name: 'Fun Place!!',
-        started_at: date,
+        started_at: datestring,
+        owner: { id: owner.id },
       }.to_json,
       set_headers(device_token)
 
+      expect(response.code).to eq "200"
       response_json = JSON.parse(response.body)
       event = Event.last
       expect(response_json).to eq({ 'id' => event.id })
       expect(event.address).to eq '123 Example St.'
-      expect(event.ended_at.to_i).to eq date.to_i
+      expect(event.ended_at).to eq date
       expect(event.lat).to eq 1.0
       expect(event.lon).to eq 1.0
       expect(event.name).to eq 'Fun Place!!'
-      expect(event.started_at.to_i).to eq date.to_i
-      expect(event.owner).to eq owner
+      expect(event.started_at).to eq date
+      expect(event.user).to eq owner
     end
 
     it 'returns an error message when invalid' do
@@ -111,7 +93,7 @@ describe "Events API" do
     def post(path, data, headers)
       uri = URI("http://localhost:4321" + path)
       Net::HTTP.start(uri.host, uri.port) do |http|
-        http.post(uri, data.to_json, headers)
+        http.post(uri, data, headers)
       end
     end
   end
@@ -130,10 +112,10 @@ describe "Events API" do
         name: new_name,
         started_at: event.started_at,
         owner: {
-          id: event.owner.id
+          id: event.user.id
         }
       }.to_json,
-      set_headers(event.owner.device_token)
+      set_headers(event.user.device_token)
 
       event = event.reload
       expect(event.name).to eq new_name
@@ -151,10 +133,10 @@ describe "Events API" do
         name: nil,
         started_at: event.started_at,
         owner: {
-          id: event.owner.id
+          id: event.user.id
         }
       }.to_json,
-      set_headers(event.owner.device_token)
+      set_headers(event.user.device_token)
 
       event = event.reload
       expect(event.name).to_not be nil
@@ -170,7 +152,7 @@ describe "Events API" do
     def patch(path, data, headers)
       uri = URI("http://localhost:4321" + path)
       Net::HTTP.start(uri.host, uri.port) do |http|
-        http.patch(uri, data.to_json, headers)
+        http.patch(uri, data, headers)
       end
     end
   end

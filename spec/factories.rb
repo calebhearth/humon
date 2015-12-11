@@ -1,17 +1,23 @@
-Event = Class.new(OpenStruct) do
-  def reload
-    self
-  end
+require "active_record"
+ActiveRecord::Base.establish_connection(
+  "postgres://localhost/humon_development"
+)
+class User < ActiveRecord::Base; end
+class Event < ActiveRecord::Base
+  belongs_to :user
 end
-User = Class.new(OpenStruct)
+class Attendance < ActiveRecord::Base
+  belongs_to :user
+  belongs_to :event
+end
 
 FactoryGirl.define do
   sequence :lat do |n|
-    "#{n}.0".to_f
+    "#{n}.1".to_f
   end
 
   sequence :lon do |n|
-    "#{n}.0".to_f
+    "#{n}.2".to_f
   end
 
   sequence :name do |n|
@@ -33,11 +39,13 @@ FactoryGirl.define do
 
   factory :event do
     sequence(:id)
+    address "address"
     lat
     lon
     name
     started_at
-    owner factory: :user
+    ended_at { generate(:started_at) }
+    user
   end
 
   factory :user do
