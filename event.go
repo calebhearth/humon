@@ -67,6 +67,24 @@ func (e *Event) Create() error {
 	return nil
 }
 
+func (e Event) Update() error {
+	err := e.validate()
+	if err != nil {
+		return err
+	}
+
+	db, err := sql.Open("postgres", "postgres://localhost/humon_development?sslmode=disable")
+	if err != nil {
+		return fmt.Errorf("Error connection: " + err.Error())
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`UPDATE events SET ended_at = $1, name = $2, started_at = $3, user_id = $4, address = $5, lat = $6, lon = $7, updated_at = $8 WHERE id = $9`,
+		e.EndedAt, e.Name, e.StartedAt, e.Owner.Id, e.Address, e.Lat, e.Lon, time.Now(), e.Id,
+	)
+	return err
+}
+
 type validationFailure struct {
 	Message string   `json:"message"`
 	Errors  []string `json:"errors"`
